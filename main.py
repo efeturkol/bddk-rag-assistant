@@ -1,8 +1,14 @@
 import math
 import json
 import sqlite3
+from sentence_transformers import SentenceTransformer
 from foundry_local_sdk import Configuration, FoundryLocalManager #conf sdkyı başlatırken ayarları vermek için
                                             #manager modelleri indirmek embed etmek ve chat için kullanacağımız ana nesne.
+
+# Sentence-transformers modeli — Colab'da DB'yi bu modelle embed ettik
+# Sorgu embedding'i de aynı modelle yapılmalı, yoksa vektörler uyuşmaz
+embedding_model = SentenceTransformer("embedding-model")
+
 
 # SQLite'tan chunk'ları, source'ları ve embedding'leri yükle
 def load_from_database(db_path="belgeler/bddk.db"):
@@ -32,14 +38,10 @@ def main():
     sources, documents, doc_embeddings = load_from_database()
     print(f"{len(documents)} chunk veritabanından yüklendi.\n")
 
+    # Foundry Local başlat — sadece chat için kullanıyoruz
     config = Configuration(app_name="bddk-rag-assistant")
     FoundryLocalManager.initialize(config)
     manager = FoundryLocalManager.instance
-
-    # Embedding modelini yükle — metinleri vektöre çevirmek için
-    embedding_model = manager.catalog.get_model("qwen3-embedding-0.6b")
-    embedding_model.load()
-    embedding_client = embedding_model.get_embedding_client()
 
     # Chat modelini yükle — bulunan dokümanları okuyup cevap üretecek olan
     chat_model = manager.catalog.get_model("phi-3.5-mini")
@@ -47,9 +49,10 @@ def main():
     chat_client = chat_model.get_chat_client()
 
     # Soru sor
-    query = "Kredi kartı taksit sınırları nelerdir?"
-    query_response = embedding_client.generate_embeddings([query])
-    query_embedding = query_response.data[0].embedding
+    query = "Bankaların iç sistemleri nelerdir?"
+
+    # Sorguyu embed et — DB ile aynı model kullanılmalı
+    query_embedding = embedding_model.encode(query).tolist()
 
     # Retrieve — en alakalı chunk'ları bul
     results = find_relevant(query_embedding, doc_embeddings, documents, sources)
@@ -61,7 +64,7 @@ def main():
     # Augment — bulunan chunk'ları soruyla birleştir, modele context olarak ver
     # Modele kendi bilgisinden değil, bu belgelerden cevap vermesini söylüyoruz
     context = "\n\n".join([f"Kaynak: {source}\n{doc}" for doc, source, _ in results])
-    prompt = f"""Aşağıdaki BDDK belgelerine dayanarak soruyu Türkçe olarak cevapla.
+    prompt = f"""Aşağıdaki BDDK ve KVKK belgelerine dayanarak soruyu Türkçe olarak cevapla.
 Cevabının sonunda hangi kaynaktan yararlandığını belirt.
 Eğer belgede cevap yoksa 'Bilmiyorum' de.
 
@@ -76,15 +79,15 @@ Cevap:"""
     completion = chat_client.complete_chat(
         messages=[
             {
-                "role": "system",
-                "content": """Sen bir BDDK mevzuat asistanısın. 
-Sana verilen belge parçalarına dayanarak soruları Türkçe olarak cevapla.
+    "role": "system",
+    "content": """Sen bir BDDK ve KVKK mevzuat asistanısın.
+Sana verilen belge parçalarındaki bilgiyi AYNEN kullan, yorum katma.
 Kurallar:
-- Sadece verilen belgelerdeki bilgileri kullan
-- Kısa ve net cevap ver, tekrar etme
+- Belgede geçen tanımı veya maddeyi doğrudan aktar
+- Kendi yorumunu ekleme
 - Cevabın sonunda sadece bir kez kaynak belirt
 - Belgede cevap yoksa sadece 'Bu konuda belgelerimde bilgi bulunmuyor' de"""
-            },
+},
             {
                 "role": "user",
                 "content": prompt
