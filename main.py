@@ -1,14 +1,21 @@
 import math
 import json
+import sqlite3
 from foundry_local_sdk import Configuration, FoundryLocalManager #conf sdkyı başlatırken ayarları vermek için
                                             #manager modelleri indirmek embed etmek ve chat için kullanacağımız ana nesne.
 
-# Embedding'leri diskten yükle — ingest.py'nin kaydettiği dosyadan okuyoruz
-# Her çalıştırmada PDF'i yeniden embed etmiyoruz
-with open("belgeler/embeddings.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-    documents = data["chunks"]        # orijinal metin parçaları
-    doc_embeddings = data["embeddings"]  # onların vektörleri
+# SQLite'tan chunk'ları ve embedding'leri yükle
+# JSON'dan okumak yerine artık veritabanından okuyoruz
+def load_from_database(db_path="belgeler/bddk.db"):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT content, embedding FROM documents")
+    rows = cursor.fetchall()
+    conn.close()
+    # content düz metin, embedding JSON string → tekrar listeye çeviriyoruz
+    documents = [row[0] for row in rows]
+    embeddings = [json.loads(row[1]) for row in rows]
+    return documents, embeddings
 
 def cosine_similarity(a, b): #iki vektörün ne kadar yakın olduğunu ölçmek için kosinüs benzerliği hesaplar
     dot = sum(x * y for x, y in zip(a, b))
@@ -16,12 +23,16 @@ def cosine_similarity(a, b): #iki vektörün ne kadar yakın olduğunu ölçmek 
     norm_b = math.sqrt(sum(x ** 2 for x in b))
     return dot / (norm_a * norm_b)
 
-def find_relevant(query_embedding, doc_embeddings, top_k=2): #sorduğumuz soruyu embed edip tüm dökümanın vektörleri ile karşılaştırır ve en yüksek 2 skora sahip olanları döndürür
+def find_relevant(query_embedding, doc_embeddings, documents, top_k=2): #sorduğumuz soruyu embed edip tüm dökümanın vektörleri ile karşılaştırır ve en yüksek 2 skora sahip olanları döndürür
     scores = [cosine_similarity(query_embedding, d) for d in doc_embeddings]
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)
     return [(documents[i], score) for i, score in ranked[:top_k]]
 
 def main():
+    # Veritabanından chunk'ları ve embedding'leri yükle
+    documents, doc_embeddings = load_from_database()
+    print(f"{len(documents)} chunk veritabanından yüklendi.\n")
+
     config = Configuration(app_name="bddk-rag-assistant")
     FoundryLocalManager.initialize(config)
     manager = FoundryLocalManager.instance
@@ -42,7 +53,7 @@ def main():
     query_embedding = query_response.data[0].embedding
 
     # Retrieve — en alakalı chunk'ları bul
-    results = find_relevant(query_embedding, doc_embeddings)
+    results = find_relevant(query_embedding, doc_embeddings, documents)
     print(f"Soru: {query}\n")
     print("En alakalı chunk'lar:")
     for doc, score in results:

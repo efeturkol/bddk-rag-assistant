@@ -1,5 +1,6 @@
 import pdfplumber
 import json
+import sqlite3
 from foundry_local_sdk import Configuration, FoundryLocalManager #conf sdkyı başlatırken ayarları vermek için
                                             #manager modelleri indirmek embed etmek ve chat için kullanacağımız ana nesne.
 
@@ -23,6 +24,21 @@ def split_into_chunks(text, chunk_size=500, overlap=50):
         start += chunk_size - overlap  # overlap: chunk'lar arası 50 karakter örtüşme
     return chunks
 
+# SQLite veritabanını hazırla — dosya yoksa oluşturur, varsa açar
+def setup_database(db_path="belgeler/bddk.db"):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    # documents tablosu: id otomatik artar, content metin, embedding JSON string
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            embedding TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
+
 # PDF'i oku ve chunk'lara böl
 text = pdf_to_text("belgeler/yonetmelik.pdf")
 chunks = split_into_chunks(text)
@@ -43,12 +59,20 @@ response = embedding_client.generate_embeddings(chunks)
 chunk_embeddings = [item.embedding for item in response.data]
 print(f"{len(chunk_embeddings)} chunk embed edildi.")
 
-# Embedding'leri JSON'a kaydet — main.py her çalıştığında yeniden embed etmesin
-# chunks: orijinal metinler, embeddings: onların vektörleri
-with open("belgeler/embeddings.json", "w", encoding="utf-8") as f:
-    json.dump({
-        "chunks": chunks,
-        "embeddings": chunk_embeddings
-    }, f, ensure_ascii=False)
+# SQLite'a kaydet
+conn = setup_database()
+cursor = conn.cursor()
 
-print("Embeddings belgeler/embeddings.json'a kaydedildi.")
+# Her çalıştırmada tabloyu temizle — aynı dokümanı iki kez eklememek için
+cursor.execute("DELETE FROM documents")
+
+for chunk, embedding in zip(chunks, chunk_embeddings):
+    # Embedding vektörünü JSON string'e çevirip saklıyoruz
+    cursor.execute(
+        "INSERT INTO documents (content, embedding) VALUES (?, ?)",
+        (chunk, json.dumps(embedding))
+    )
+
+conn.commit()
+conn.close()
+print("Veriler belgeler/bddk.db'ye kaydedildi.")
