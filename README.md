@@ -1,12 +1,8 @@
 # BDDK & KVKK Mevzuat Asistanı
 
-Türk bankacılık ve kişisel veri koruma mevzuatı üzerine çalışan, tamamen çevrimdışı RAG tabanlı yapay zeka asistanı. Microsoft Cloud Summer School 2026 kapsamında geliştirildi.
+Türk bankacılık ve kişisel veri koruma mevzuatı üzerinde çalışan, tamamen çevrimdışı RAG tabanlı soru-cevap sistemi. 15 BDDK yönetmeliği ve KVKK metni üzerinde anlamsal arama yapar; her yanıtın dayandığı belge ve benzerlik skorunu birlikte gösterir.
 
----
-
-## Ne Yapar
-
-BDDK yönetmelikleri ve KVKK dokümanlarından oluşan 15 PDF üzerinde semantik arama yaparak soruları yanıtlar. Her cevabın yanında ilgili yönetmelik maddesi ve benzerlik skoru gösterilir.
+Microsoft Cloud Summer School 2026 kapsamında geliştirildi.
 
 ---
 
@@ -21,10 +17,12 @@ Cosine similarity → en alakalı 3 chunk
       ↓
 Prompt oluşturma (chunk + soru)
       ↓
-Microsoft Foundry Local → Phi modeli
+Microsoft Foundry Local → Phi-3.5 Mini
       ↓
 Cevap + kaynak gösterimi
 ```
+
+Belge parçaları SQLite'ta vektörleriyle birlikte saklanır. Benzerlik skoru 0.55'in altında kalan sorgular yanıtlanmaz, sistem bilgi bulunmadığını bildirir.
 
 ---
 
@@ -41,26 +39,21 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Embedding modelini indir:**
-```bash
-python3 -c "
-from sentence_transformers import SentenceTransformer
-SentenceTransformer('efeturkol/bddk-embedding-model').save('embedding-model')
-"
-```
+**Veritabanını oluştur.** `belgeler/` klasöründeki PDF'leri işler, embedding'leri çıkarır ve `bddk.db` dosyasını yazar. Embedding modeli ilk çalıştırmada HuggingFace'ten otomatik iner.
 
-**Veritabanını oluştur:**
 ```bash
 chmod +x run_ingest.sh
 ./run_ingest.sh
 ```
 
 **Backend:**
+
 ```bash
 uvicorn api:app --reload
 ```
 
-**Frontend:**
+**Frontend** (ayrı terminalde):
+
 ```bash
 cd frontend
 npm install
@@ -77,7 +70,7 @@ npm start
 |---|---|
 | LLM Runtime | Microsoft Foundry Local |
 | Chat Modeli | Phi-3.5 Mini |
-| Embedding | paraphrase-multilingual-MiniLM-L12-v2 |
+| Embedding | [efeturkol/bddk-embedding-model](https://huggingface.co/efeturkol/bddk-embedding-model) |
 | Vektör Depolama | SQLite |
 | Backend | FastAPI |
 | Frontend | React |
@@ -85,14 +78,14 @@ npm start
 
 ---
 
-## Belgeler
+## Belge Kaynakları
 
-`belgeler/` klasörüne aşağıdaki kaynaklardan PDF indir:
+`belgeler/` klasöründeki 15 PDF resmî kaynaklardan alınmıştır:
 
-- BDDK: https://www.bddk.org.tr/Mevzuat
-- KVKK: https://www.kvkk.gov.tr/Icerik/6749/KVKK-Mevzuat
+- BDDK Mevzuat — https://www.bddk.org.tr/Mevzuat
+- KVKK Mevzuat — https://www.kvkk.gov.tr/Icerik/6749/KVKK-Mevzuat
 
-`bddk.db` dosyası `run_ingest.sh` ile otomatik oluşturulur, repoya dahil değildir.
+Yeni belge eklemek için PDF'i `belgeler/` klasörüne koyup `./run_ingest.sh` komutunu tekrar çalıştırmak yeterli.
 
 ---
 
