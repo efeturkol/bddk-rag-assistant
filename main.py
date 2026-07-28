@@ -43,6 +43,10 @@ def main():
     query_embedding = embedding_model.encode(query).tolist()
     results = find_relevant(query_embedding, doc_embeddings, documents, sources)
 
+    if results[0][2] < 0.55:
+        print("Bu konuda belgelerimde bilgi bulunmuyor.")
+        return
+
     print(f"Soru: {query}\n")
     print("En alakalı chunk'lar:")
     for doc, source, score in results:
@@ -50,7 +54,6 @@ def main():
 
     context = "\n\n".join([f"Kaynak: {source}\n{doc}" for doc, source, _ in results])
     prompt = f"""Aşağıdaki BDDK ve KVKK belgelerine dayanarak soruyu Türkçe olarak cevapla.
-Eğer belgede cevap yoksa 'Bilmiyorum' de.
 
 Belgeler:
 {context}
@@ -64,12 +67,9 @@ Cevap:"""
             {
                 "role": "system",
                 "content": """Sen bir BDDK ve KVKK mevzuat asistanısın.
-Sana verilen belge parçalarındaki bilgiyi AYNEN kullan, yorum katma.
-Kurallar:
-- Belgede geçen tanımı veya maddeyi doğrudan aktar
-- Kendi yorumunu ekleme
-- Cevabın sonunda sadece bir kez kaynak belirt
-- Belgede cevap yoksa sadece 'Bu konuda belgelerimde bilgi bulunmuyor' de"""
+Verilen belgelerden doğrudan alıntı yaparak cevap ver.
+Kaynak adı yazma, tekrar etme, açıklama ekleme.
+Sadece belgede yazan bilgiyi tek seferde aktar."""
             },
             {"role": "user", "content": prompt}
         ]
