@@ -7,7 +7,7 @@ from foundry_local_sdk import Configuration, FoundryLocalManager #conf sdkyı ba
 
 # Sentence-transformers modeli — Colab'da DB'yi bu modelle embed ettik
 # Sorgu embedding'i de aynı modelle yapılmalı, yoksa vektörler uyuşmaz
-embedding_model = SentenceTransformer("embedding-model")
+embedding_model = SentenceTransformer("efeturkol/bddk-embedding-model")
 
 
 # SQLite'tan chunk'ları, source'ları ve embedding'leri yükle

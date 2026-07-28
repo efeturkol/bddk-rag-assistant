@@ -19,7 +19,7 @@ app.add_middleware(
 
 # Modelleri başlangıçta bir kere yükle
 print("Modeller yükleniyor...")
-embedding_model = SentenceTransformer("embedding-model")
+embedding_model = SentenceTransformer("efeturkol/bddk-embedding-model")
 
 config = Configuration(app_name="bddk-rag-assistant")
 FoundryLocalManager.initialize(config)
