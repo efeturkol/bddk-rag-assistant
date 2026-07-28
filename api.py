@@ -9,7 +9,6 @@ from foundry_local_sdk import Configuration, FoundryLocalManager
 
 app = FastAPI()
 
-# React'tan gelen isteklere izin ver — CORS olmadan tarayıcı bloklar
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Modelleri başlangıçta bir kere yükle
 print("Modeller yükleniyor...")
 embedding_model = SentenceTransformer("efeturkol/bddk-embedding-model")
 
@@ -28,7 +26,6 @@ chat_model = manager.catalog.get_model("phi-3.5-mini")
 chat_model.load()
 chat_client = chat_model.get_chat_client()
 
-# Veritabanını başlangıçta bir kere yükle
 conn = sqlite3.connect("belgeler/bddk.db")
 cursor = conn.cursor()
 cursor.execute("SELECT source, content, embedding FROM documents")
@@ -56,12 +53,9 @@ class QueryRequest(BaseModel):
 @app.post("/ask")
 def ask(request: QueryRequest):
     query = request.query
-
-    # Retrieve
     query_embedding = embedding_model.encode(query).tolist()
     results = find_relevant(query_embedding)
 
-    # Augment
     context = "\n\n".join([f"Kaynak: {source}\n{doc}" for doc, source, _ in results])
     prompt = f"""Aşağıdaki BDDK ve KVKK belgelerine dayanarak soruyu Türkçe olarak cevapla.
 Eğer belgede cevap yoksa 'Bilmiyorum' de.
@@ -72,7 +66,6 @@ Belgeler:
 Soru: {query}
 Cevap:"""
 
-    # Generate
     completion = chat_client.complete_chat(
         messages=[
             {
@@ -89,10 +82,8 @@ Kurallar:
         ]
     )
 
-    cevap = completion.choices[0].message.content
-
     return {
-        "answer": cevap,
+        "answer": completion.choices[0].message.content,
         "sources": [
             {"source": source, "content": doc[:300], "score": round(score, 3)}
             for doc, source, score in results
